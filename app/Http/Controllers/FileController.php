@@ -77,10 +77,10 @@ public function encrypt(Request $request)
     $iv = openssl_random_pseudo_bytes(16);   // 128-bit IV
 
     // Environment variable handling (although storing these in .env is not recommended)
-    self::clear_env('ENCRYPTION_KEY');
-    self::clear_env('ENCRYPTION_IV');
-    self::set_env('ENCRYPTION_KEY', base64_encode($key)); // Encode to Base64 to save as string
-    self::set_env('ENCRYPTION_IV', base64_encode($iv));
+    // self::clear_env('ENCRYPTION_KEY');
+    // self::clear_env('ENCRYPTION_IV');
+    // self::set_env('ENCRYPTION_KEY', base64_encode($key)); // Encode to Base64 to save as string
+    // self::set_env('ENCRYPTION_IV', base64_encode($iv));
 
     // Constructing the full file path from the provided path and file name
     $fullFilePath = $request->input('filePath');
