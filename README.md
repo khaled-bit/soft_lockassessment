@@ -1,6 +1,6 @@
 # How do i Enhanced the security of encrypting file and decrypting it ??
 
-### SQL injection: Prventing Sql by using binding and validation
+### SQL injection: Prventing Sql injection by using parameter binding and validation
 ### ENV configuration: configuring .env to minimize the risk of exposing sensitive data 
 
 
