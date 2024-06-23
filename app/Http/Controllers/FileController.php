@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Barryvdh\Debugbar\Facades\Debugbar;
 
 class FileController extends Controller
 {
@@ -14,6 +15,9 @@ class FileController extends Controller
 
     public function upload(Request $request)
     {
+        Debugbar::addMessage('Uploading file...');
+
+        //prevent sql injection , XSS attacks like <script>alert('Hi')</script>
         $request->validate([
             'file' => 'required|file'
         ]);
@@ -34,6 +38,7 @@ class FileController extends Controller
     public function set_env($key, $value)
     {
         $path = app()->environmentFilePath();
+
         $escaped = preg_quote('=' . env($key), '/');
        file_put_contents($path, preg_replace(
             "/^{$key}{$escaped}/m",
@@ -61,6 +66,7 @@ class FileController extends Controller
 
 public function encrypt(Request $request)
 {
+    Debugbar::addMessage('encrypt file...');
     $request->validate([
         'filePath' => 'required|string',
         'fileName' => 'required|string',
@@ -68,7 +74,13 @@ public function encrypt(Request $request)
     ]);
 
     // Adjusting the file location to point to an 'encrypted_files' directory
-    $fileLocation = $request->input('fileLocation') ? rtrim($request->input('fileLocation'), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'encrypted_files' : base_path('encrypted_files');
+    $defaultFileLocation = base_path('encrypted_files');
+    $fileLocation = $request->input('fileLocation') ? rtrim($request->input('fileLocation'), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'encrypted_files' : $defaultFileLocation;
+
+
+    if (!is_dir($fileLocation) && !mkdir($fileLocation, 0755, true) && !is_dir($fileLocation)) {
+        return response()->json(['error' => 'Failed to create directory for encrypted files.', 'type' => 'encrypt'], 500);
+    }
 
     $fileName = $request->input('fileName');
 
@@ -76,44 +88,97 @@ public function encrypt(Request $request)
     $key = openssl_random_pseudo_bytes(32);  // 256-bit key
     $iv = openssl_random_pseudo_bytes(16);   // 128-bit IV
 
-    // Environment variable handling (although storing these in .env is not recommended)
+    // //     //Environment variable handling (although storing these in .env is not recommended)
     // self::clear_env('ENCRYPTION_KEY');
     // self::clear_env('ENCRYPTION_IV');
     // self::set_env('ENCRYPTION_KEY', base64_encode($key)); // Encode to Base64 to save as string
     // self::set_env('ENCRYPTION_IV', base64_encode($iv));
+    // $key = base64_decode(env('ENCRYPTION_KEY'));
+    // $iv = base64_decode(env('ENCRYPTION_IV'));
+
 
     // Constructing the full file path from the provided path and file name
     $fullFilePath = $request->input('filePath');
     if (!str_starts_with($fullFilePath, '/')) {
-        $fullFilePath = storage_path('app/' . $fullFilePath); // Ensure this path is correct as per your file structure
+        $fullFilePath = storage_path('app/' . $fullFilePath);
     }
 
-    if (file_exists($fullFilePath)) {
-        $data = file_get_contents($fullFilePath);
-        $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, 0, $iv);
-
-        // Ensuring the encrypted directory exists
-        if (!is_dir($fileLocation)) {
-            mkdir($fileLocation, 0755, true);
-        }
-
-        $encryptedFilePath = $fileLocation . DIRECTORY_SEPARATOR . $fileName . '.enc';
-        file_put_contents($encryptedFilePath, $encrypted);
-
-        return response()->json(['message' => 'File encrypted successfully!', 'type' => 'encrypt']);
-    } else {
+    // Check if the file exists before attempting to encrypt
+    if (!file_exists($fullFilePath)) {
         return response()->json(['error' => 'File does not exist.', 'type' => 'encrypt'], 404);
     }
+
+    $data = file_get_contents($fullFilePath);
+    $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, 0, $iv);
+    $encryptedDataWithKeyIV = base64_encode($key) . '::' . base64_encode($iv) . '::' . $encrypted;
+
+    $encryptedFilePath = $fileLocation . DIRECTORY_SEPARATOR . $fileName . '.enc';
+    if (file_put_contents($encryptedFilePath, $encryptedDataWithKeyIV) === false) {
+        return response()->json(['error' => 'Failed to write encrypted file.', 'type' => 'encrypt'], 500);
+    }
+
+    return response()->json(['message' => 'File encrypted successfully!', 'type' => 'encrypt']);
 }
+// public function encrypt(Request $request)
+// {
+//     Debugbar::addMessage('encrpt file...');
+
+//     $request->validate([
+//         'filePath' => 'required|string',
+//         'fileName' => 'required|string',
+//         'fileLocation' => 'nullable|string'
+//     ]);
+
+//     // Adjusting the file location to point to an 'encrypted_files' directory
+//     $fileLocation = $request->input('fileLocation') ? rtrim($request->input('fileLocation'), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'encrypted_files' : base_path('encrypted_files');
+
+//     $fileName = $request->input('fileName');
+
+//     // Generating encryption key and IV
+//     $key = openssl_random_pseudo_bytes(32);  // 256-bit key
+//     $iv = openssl_random_pseudo_bytes(16);   // 128-bit IV
+
+//     //Environment variable handling (although storing these in .env is not recommended)
+//     self::clear_env('ENCRYPTION_KEY');
+//     self::clear_env('ENCRYPTION_IV');
+//     self::set_env('ENCRYPTION_KEY', base64_encode($key)); // Encode to Base64 to save as string
+//     self::set_env('ENCRYPTION_IV', base64_encode($iv));
+
+//     // Constructing the full file path from the provided path and file name
+//     $fullFilePath = $request->input('filePath');
+//     if (!str_starts_with($fullFilePath, '/')) {
+//         $fullFilePath = storage_path('app/' . $fullFilePath); // Ensure this path is correct as per your file structure
+//     }
+
+//     if (file_exists($fullFilePath)) {
+//         $data = file_get_contents($fullFilePath);
+//         $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, 0, $iv);
+
+//         // Ensuring the encrypted directory exists
+//         if (!is_dir($fileLocation)) {
+//             mkdir($fileLocation, 0755, true);
+//         }
+
+//         $encryptedFilePath = $fileLocation . DIRECTORY_SEPARATOR . $fileName . '.enc';
+//         file_put_contents($encryptedFilePath, $encrypted);
+
+//         return response()->json(['message' => 'File encrypted successfully!', 'type' => 'encrypt']);
+//     } else {
+//         return response()->json(['error' => 'File does not exist.', 'type' => 'encrypt'], 404);
+//     }
+// }
 
 
     public function decrypt(Request $request)
 {
+    Debugbar::addMessage('decrpt file...');
+    try {
     $request->validate([
         'filePath' => 'required|string',
         'fileName' => 'required|string',
         'fileLocation' => 'nullable|string'
     ]);
+
 
     $filePath = $request->input('filePath');
     $key = base64_decode(env('ENCRYPTION_KEY'));
@@ -122,6 +187,14 @@ public function encrypt(Request $request)
 
     $fileName = $request->input('fileName');
     $fileLocation = $request->input('fileLocation') ? rtrim($request->input('fileLocation'), DIRECTORY_SEPARATOR) : base_path('decrypted_files');
+    $encryptedData = file_get_contents(storage_path('app/' . $filePath));
+    list($encodedKey, $encodedIv, $encryptedData) = explode('::', $encryptedData, 3);
+    $key = base64_decode($encodedKey);
+    $iv = base64_decode($encodedIv);
+
+    // Proceed with decryption
+
+
 
     if (strlen($key) !== 32) {
         return response()->json([
@@ -137,12 +210,14 @@ public function encrypt(Request $request)
         ], 400);
     }
 
-    try {
-        $encryptedData = file_get_contents(storage_path('app/' . $filePath));
-        $decrypted = openssl_decrypt($encryptedData, 'aes-256-cbc', $key, 0, $iv);
+
+
+    $decrypted = openssl_decrypt($encryptedData, 'aes-256-cbc', $key, 0, $iv);
 
         if ($decrypted === false) {
             return response()->json([
+                'key'=>  $key,
+                'iv'=>$iv,
                 'error' => 'Decryption failed. Please check your key and IV.',
                 'type' => 'decrypt'
             ], 400);
