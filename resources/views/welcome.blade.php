@@ -1,132 +1,108 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>File Encryption App</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .alert {
-            display: none;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload and Encrypt File</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/resumable.js/1.1.0/resumable.min.js"></script>
 </head>
 <body>
-<div class="container mt-5">
-    <h1 class="text-center">File Encryption App</h1>
-    <div class="card">
-        <div class="card-body">
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                @csrf
-                <div class="form-group">
-                    <label for="file">Choose a file to upload:</label>
-                    <input type="file" class="form-control-file" id="file" name="file" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Upload</button>
-            </form>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Upload and Encrypt File</h2>
+        <input type="file" id="resumable-browse" multiple class="form-control mb-3" />
+        <button id="resumable-upload-start" class="btn btn-primary mb-3">Start Upload</button>
+        <div class="progress mt-3" style="display: none;">
+            <div id="upload-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
+        <div id="file-details" class="mt-3" style="display:none;">
+            <h4>File Details</h4>
+            <ul class="list-group">
+                <li class="list-group-item">Name: <span id="file-name"></span></li>
+                <li class="list-group-item">Size: <span id="file-size"></span></li>
+                <li class="list-group-item">Extension: <span id="file-extension"></span></li>
+            </ul>
+        </div>
+        @if (session('status'))
+    <div class="alert alert-success">
+        {{ session('status') }}
+    </div>
+@endif
+
+        <form action="/encrypt" method="post" id="encryptForm" style="display: none;">
+            @csrf
+            <input type="hidden" id="uploadedFileName" name="uploadedFileName">
+
+
+            <button type="submit" class="btn btn-success">Encrypt</button>
+        </form>
+
+        <form action="/decrypt" method="post" id="decryptForm" style="display: none;">
+            @csrf
+            <input type="hidden" id="uploadedFileName" name="uploadedFileName">
+
+            <button type="submit" class="btn btn-success">Decrypt</button>
+        </form>
     </div>
 
-    @if (isset($fileDetails))
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2>File Details</h2>
-                <ul class="list-group">
-                    <li class="list-group-item">Name: {{ $fileDetails['name'] }}</li>
-                    <li class="list-group-item">Size: {{ number_format($fileDetails['size'] / 1024, 2) }} KB</li>
-                    <li class="list-group-item">Extension: {{ $fileDetails['extension'] }}</li>
-                </ul>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2>Encrypt File</h2>
-                <div id="encryptMessages"></div>
-                <form action="/encrypt" method="post" id="encryptForm">
-                    @csrf
-                    <input type="hidden" name="filePath" value="{{ $fileDetails['path'] }}">
-                    <div class="form-group">
-                        <label for="fileName">Save as (encrypted):</label>
-                        <input type="text" class="form-control" id="fileName" name="fileName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="fileLocation">Save to (location):</label>
-                        <input type="text" class="form-control" id="fileLocation" name="fileLocation" placeholder="Enter folder path">
-                    </div>
-                    <button type="submit" class="btn btn-success">Encrypt</button>
-                </form>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2>Decrypt File</h2>
-                <div id="decryptMessages"></div>
-                <div id="flashMessages">
-                    @if (Session::has('success'))
-                        <div class="alert alert-success mt-3">
-                            {{ Session::get('success') }}
-                        </div>
-                    @endif
-
-                    @if (Session::has('error'))
-                        <div class="alert alert-danger mt-3">
-                            {{ Session::get('error') }}
-                        </div>
-                    @endif
-                </div>
-                <form action="/decrypt" method="post" id="decryptForm">
-                    @csrf
-                    <input type="hidden" name="filePath" value="{{ $fileDetails['path'] }}">
-                    <div class="form-group">
-                        <label for="fileName">Save as (decrypted):</label>
-                        <input type="text" class="form-control" id="fileName" name="fileName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="fileLocation">Save to (location):</label>
-                        <input type="text" class="form-control" id="fileLocation" name="fileLocation" placeholder="Enter folder path">
-                    </div>
-                    <button type="submit" class="btn btn-danger">Decrypt</button>
-                </form>
-            </div>
-        </div>
-    @endif
-
-</div>
-<!-- Bootstrap JS and dependencies -->
-<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-<script>
-    $(document).ready(function() {
-        $('#encryptForm, #decryptForm').on('submit', function(e) {
-            e.preventDefault();
-            var form = $(this);
-            var url = form.attr('action');
-            $.ajax({
-                type: "POST",
-                url: url,
-                data: form.serialize(),
-                success: function(response) {
-                    var messageHtml = '<div class="alert alert-success">' + response.message + '</div>';
-                    displayFlashMessage(messageHtml, response.type);
-                },
-                error: function(response) {
-                    var errorMessage = response.responseJSON ? response.responseJSON.message : 'An error occurred';
-                    var messageHtml = '<div class="alert alert-danger">' + errorMessage + '</div>';
-                    displayFlashMessage(messageHtml, response.responseJSON.type);
-                }
-            });
+    <script>
+        var r = new Resumable({
+            target: '/upload_chunk',
+            query: {_token: '{{ csrf_token() }}'},
+            chunkSize: 10 * 1024 * 1024,
+            simultaneousUploads: 3,
+            testChunks: false,
+            throttleProgressCallbacks: 1,
+            fileType: ['jpg', 'iso', 'pdf', 'txt']
         });
 
-        function displayFlashMessage(messageHtml, action) {
-            var messageContainer = (action === 'encrypt') ? '#encryptMessages' : '#decryptMessages';
-            $(messageContainer).html(messageHtml);
-            $(messageContainer + ' .alert').fadeIn().delay(5000).fadeOut();
+        r.assignBrowse(document.getElementById('resumable-browse'));
+        document.getElementById('resumable-upload-start').addEventListener('click', function(){
+            r.upload();
+        });
+
+        r.on('fileAdded', function(file) {
+            document.getElementById('resumable-upload-start').style.display = 'block';
+            document.getElementById('file-details').style.display = 'block';
+            document.getElementById('file-name').textContent = file.fileName.replace(/\.[^/.]+$/, "");
+            document.getElementById('file-size').textContent = formatFileSize(file.size);
+            document.getElementById('file-extension').textContent = file.fileName.split('.').pop();
+        });
+
+        r.on('fileProgress', function(file) {
+            var progress = Math.floor(file.progress() * 100);
+            var progressBar = document.getElementById('upload-progress');
+            progressBar.style.width = progress + '%';
+            progressBar.setAttribute('aria-valuenow', progress);
+            progressBar.textContent = progress + '%';
+            document.querySelector('.progress').style.display = 'block';
+        });
+
+        r.on('fileSuccess', function(file, message) {
+            document.getElementById('upload-progress').textContent = 'Upload Complete';
+            document.getElementById('upload-progress').style.width = '100%';
+            document.getElementById('encryptForm').style.display = 'block';
+            document.getElementById('decryptForm').style.display = 'block';
+            document.getElementById('uploadedFileName').value = file.fileName;
+        });
+
+        r.on('fileError', function(file, message) {
+            console.log('Error uploading', message);
+        });
+
+
+
+        function formatFileSize(bytes) {
+            if (bytes >= 1073741824) {
+                return (bytes / 1073741824).toFixed(2) + ' GB';
+            } else if (bytes >= 1048576) {
+                return (bytes / 1048576).toFixed(2) + ' MB';
+            } else if (bytes >= 1024) {
+                return (bytes / 1024).toFixed(2) + ' KB';
+            } else {
+                return bytes + ' bytes';
+            }
         }
-    });
     </script>
-
-
 </body>
 </html>
